@@ -1,0 +1,1677 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다빈치 코드 (Da Vinci Code) - AI 통합 버전</title>
+    <!-- ONNX Runtime Web CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
+    <style>
+        /* ===== 전역 스타일 설정 ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #ffffff;
+            padding: 20px;
+        }
+
+        /* ===== 헤더 영역 ===== */
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 0.95rem;
+            color: #a0a0a0;
+        }
+
+        .ai-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            margin-top: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        /* ===== 메인 컨테이너 (2:1 레이아웃) ===== */
+        .main-container {
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* ===== 게임 영역 (왼쪽 2/3) ===== */
+        .game-area {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* ===== 게임 상태 정보 패널 ===== */
+        .game-info {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 12px 20px;
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.8rem;
+            color: #a0a0a0;
+            margin-bottom: 3px;
+        }
+
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+
+        .info-value.player-turn {
+            color: #4ecca3;
+        }
+
+        .info-value.ai-turn {
+            color: #e94560;
+        }
+
+        /* ===== 캔버스 스타일 ===== */
+        #gameCanvas {
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(180deg, #2d3436 0%, #1e272e 100%);
+            width: 100%;
+        }
+
+        /* ===== 컨트롤 버튼 영역 ===== */
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4ecca3, #44bd93);
+            color: #1a1a2e;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(78, 204, 163, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #e94560, #c73e54);
+            color: #ffffff;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-ai {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #ffffff;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ===== 추리 입력 영역 ===== */
+        .guess-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: none;
+        }
+
+        .guess-panel.active {
+            display: block;
+        }
+
+        .guess-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .guess-input label {
+            font-size: 0.9rem;
+        }
+
+        .guess-input select {
+            padding: 8px 12px;
+            font-size: 0.95rem;
+            border: none;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #1a1a2e;
+        }
+
+        /* ===== 사이드 패널 (오른쪽 1/3) ===== */
+        .side-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 300px;
+        }
+
+        /* ===== AI 말풍선 영역 ===== */
+        .ai-bubble-container {
+            background: rgba(233, 69, 96, 0.1);
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            min-height: 120px;
+        }
+
+        .ai-bubble-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .ai-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .ai-name {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .ai-bubble {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            border-top-left-radius: 5px;
+            padding: 12px 15px;
+            position: relative;
+            margin-left: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .ai-bubble::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 10px;
+            border-width: 8px;
+            border-style: solid;
+            border-color: transparent rgba(255, 255, 255, 0.1) transparent transparent;
+        }
+
+        .ai-bubble.thinking {
+            color: #74b9ff;
+        }
+
+        .ai-bubble.attack {
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        .ai-bubble.success {
+            color: #4ecca3;
+        }
+
+        .ai-bubble.fail {
+            color: #fdcb6e;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ===== 모델 상태 표시 ===== */
+        .model-status {
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 10px;
+            padding: 10px 15px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .model-status .status-icon {
+            margin-right: 8px;
+        }
+
+        .model-status.loading {
+            color: #fdcb6e;
+        }
+
+        .model-status.ready {
+            color: #4ecca3;
+        }
+
+        .model-status.error {
+            color: #e94560;
+        }
+
+        /* ===== 로그 패널 ===== */
+        .log-panel {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 15px;
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-header {
+            font-weight: bold;
+            color: #4ecca3;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .log-entry {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry.success {
+            color: #4ecca3;
+        }
+
+        .log-entry.fail {
+            color: #e94560;
+        }
+
+        .log-entry.info {
+            color: #74b9ff;
+        }
+
+        .log-entry.ai {
+            color: #667eea;
+        }
+
+        /* ===== 규칙 설명 모달 ===== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #2d3436, #1e272e);
+            border-radius: 20px;
+            padding: 25px;
+            max-width: 550px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-content h2 {
+            color: #e94560;
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+        }
+
+        .modal-content h3 {
+            color: #4ecca3;
+            margin-top: 15px;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .modal-content p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .modal-content ul {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+
+        .modal-content li {
+            margin-bottom: 6px;
+            line-height: 1.4;
+            font-size: 0.9rem;
+        }
+
+        .close-modal {
+            margin-top: 15px;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 헤더 영역 -->
+    <div class="header">
+        <h1>🎴 다빈치 코드 (AI 통합)</h1>
+        <p>상대방의 숫자를 추리하여 모든 카드를 공개하라!</p>
+        <div class="ai-badge">🧠 Hybrid AI (ONNX + 확률 추론)</div>
+    </div>
+
+    <!-- 메인 컨테이너 -->
+    <div class="main-container">
+        <!-- 게임 영역 (왼쪽 2/3) -->
+        <div class="game-area">
+            <!-- 게임 상태 정보 -->
+            <div class="game-info">
+                <div class="info-item">
+                    <div class="info-label">현재 턴</div>
+                    <div class="info-value" id="currentTurn">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">라운드</div>
+                    <div class="info-value" id="roundNumber">1</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">플레이어 공개</div>
+                    <div class="info-value" id="playerRevealed">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">AI 공개</div>
+                    <div class="info-value" id="aiRevealed">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">남은 덱</div>
+                    <div class="info-value" id="deckRemaining">-</div>
+                </div>
+            </div>
+
+            <!-- 캔버스 -->
+            <canvas id="gameCanvas" width="800" height="480"></canvas>
+
+            <!-- 컨트롤 버튼 -->
+            <div class="controls">
+                <button class="btn btn-primary" id="btnNewGame">새 게임</button>
+                <button class="btn btn-primary" id="btnDrawCard" disabled>카드 뽑기</button>
+                <button class="btn btn-secondary" id="btnRules">게임 규칙</button>
+            </div>
+
+            <!-- 추리 패널 -->
+            <div class="guess-panel" id="guessPanel">
+                <div class="guess-input">
+                    <label>카드 위치:</label>
+                    <select id="cardPosition"></select>
+                    <label>추리 숫자:</label>
+                    <select id="guessNumber">
+                        <option value="-1">- (조커)</option>
+                        <option value="0">0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                    </select>
+                    <button class="btn btn-primary" id="btnGuess">추리하기</button>
+                    <button class="btn btn-secondary" id="btnPass">턴 넘기기</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 사이드 패널 (오른쪽 1/3) -->
+        <div class="side-panel">
+            <!-- 모델 상태 -->
+            <div class="model-status loading" id="modelStatus">
+                <span class="status-icon">⏳</span>
+                <span id="modelStatusText">ONNX 모델 로딩 중...</span>
+            </div>
+
+            <!-- AI 말풍선 -->
+            <div class="ai-bubble-container">
+                <div class="ai-bubble-header">
+                    <div class="ai-avatar">🧠</div>
+                    <span class="ai-name">Neural AI</span>
+                </div>
+                <div class="ai-bubble" id="aiBubble">
+                    모델을 로딩하고 있습니다...
+                </div>
+            </div>
+
+            <!-- 게임 로그 -->
+            <div class="log-panel" id="logPanel">
+                <div class="log-header">📋 게임 로그</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 규칙 모달 -->
+    <div class="modal" id="rulesModal">
+        <div class="modal-content">
+            <h2>🎴 다빈치 코드 게임 규칙</h2>
+            <p><strong>게임 목표:</strong> 상대방의 모든 카드 숫자를 맞춰 공개시키면 승리!</p>
+
+            <h3>카드 구성</h3>
+            <ul>
+                <li>0~11까지 숫자 카드 (흑/백 각 12장, 총 24장)</li>
+                <li><strong>조커 2장</strong> (흑/백 각 1장) - 표시: "-"</li>
+                <li>각 플레이어는 시작 시 4장씩 받음</li>
+            </ul>
+
+            <h3>카드 정렬 규칙</h3>
+            <ul>
+                <li>숫자는 왼쪽→오른쪽 오름차순 정렬</li>
+                <li>같은 숫자: 검은색이 왼쪽</li>
+                <li><strong>조커:</strong> 아무 위치나 가능 (단, 조커끼리 붙어있으면 흰색이 오른쪽)</li>
+            </ul>
+
+            <h3>게임 진행</h3>
+            <ul>
+                <li><strong>카드 뽑기:</strong> 덱에서 1장 뽑아 패에 추가</li>
+                <li><strong>추리하기:</strong> 상대 카드 선택 후 숫자 추리</li>
+                <li><strong>성공:</strong> 카드 공개, 연속 추리 가능</li>
+                <li><strong>실패:</strong> 내 새 카드 공개, 턴 넘김</li>
+            </ul>
+
+            <h3>AI 특징</h3>
+            <p>🧠 이 AI는 ONNX 신경망을 사용하여 추리합니다!</p>
+
+            <button class="btn btn-primary close-modal" id="closeRules">닫기</button>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // 다빈치 코드 게임 - ONNX AI 버전
+        // ========================================
+
+        // ===== 게임 상수 =====
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 480;
+        const CARD_WIDTH = 55;
+        const CARD_HEIGHT = 85;
+        const CARD_GAP = 8;
+        const JOKER_VALUE = -1;
+        const MAX_HAND_SIZE = 13;
+        const NUM_NUMBERS = 13;
+        const INPUT_SIZE = 65;
+        const OUTPUT_SIZE = MAX_HAND_SIZE * NUM_NUMBERS;
+
+        // ===== ONNX 모델 관련 =====
+        let onnxSession = null;
+        let modelLoaded = false;
+
+        // ===== 프로토콜 확인 =====
+        window.onload = function () {
+            if (window.location.protocol === 'file:') {
+                setTimeout(() => {
+                    if (!modelLoaded) {
+                        alert("⚠️ 모델 로드 실패\n\n파일을 직접 열면 AI가 작동하지 않을 수 있습니다.\n\n해결 방법:\n1. 'run_game.bat' (서버 모드) 실행\n2. 'run_game_direct.bat' (크롬 직접 실행) 사용");
+                    }
+                }, 2500);
+            }
+        };
+
+        // ===== AI 메모리 시스템 (하이브리드 AI) =====
+        const aiMemory = {
+            // 실패한 추리 기록 (게임당 리셋)
+            failedGuesses: new Set(),  // "position-number" 형식
+
+            // 각 위치별 가능한 숫자 범위 (분석 결과 캐싱)
+            cachedProbabilities: null,
+
+            // 마지막 분석 시점의 상태 해시
+            lastStateHash: null,
+
+            // 성공한 추리 연속 횟수
+            consecutiveSuccesses: 0,
+
+            // AI 설정
+            config: {
+                onnxWeight: 0.4,      // ONNX 신뢰도 가중치
+                ruleWeight: 0.6,       // 규칙 기반 가중치
+                aggressiveness: 0.7,   // 연속 추리 적극성 (0-1)
+                minConfidenceForAttack: 0.15  // 최소 공격 신뢰도
+            }
+        };
+
+        // ===== 게임 상태 관리 =====
+        const gameState = {
+            deck: [],
+            playerHand: [],
+            aiHand: [],
+            currentTurn: 'player',
+            phase: 'waiting',
+            round: 1,
+            drawnCard: null,
+            gameOver: false,
+            winner: null,
+            playerJokerPositions: [],
+            aiJokerPositions: []
+        };
+
+        // 캔버스 & 컨텍스트
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // DOM 요소
+        const btnNewGame = document.getElementById('btnNewGame');
+        const btnDrawCard = document.getElementById('btnDrawCard');
+        const btnRules = document.getElementById('btnRules');
+        const btnGuess = document.getElementById('btnGuess');
+        const btnPass = document.getElementById('btnPass');
+        const guessPanel = document.getElementById('guessPanel');
+        const cardPositionSelect = document.getElementById('cardPosition');
+        const guessNumberSelect = document.getElementById('guessNumber');
+        const rulesModal = document.getElementById('rulesModal');
+        const closeRules = document.getElementById('closeRules');
+        const logPanel = document.getElementById('logPanel');
+        const aiBubble = document.getElementById('aiBubble');
+        const modelStatus = document.getElementById('modelStatus');
+        const modelStatusText = document.getElementById('modelStatusText');
+
+        // =========================================================
+        // ONNX 모델 로드
+        // =========================================================
+        // =========================================================
+        // ONNX 모델 로드
+        // =========================================================
+        async function loadONNXModel() {
+            try {
+                modelStatusText.textContent = 'ONNX 모델 로딩 중...';
+
+                // 설정 적용 (호환성 및 에러 방지)
+                ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/";
+                ort.env.wasm.numThreads = 1;
+                ort.env.wasm.simd = false;
+                ort.env.wasm.proxy = false; // 메인 스레드 강제 실행
+
+                // 초기화 대기 (WASM 준비 - 1초)
+                await new Promise(r => setTimeout(r, 1000));
+
+                // ONNX 모델 로드
+                const modelPath = './davinci_ai.onnx';
+
+                // 세션 옵션 (WebGL 우선, 실패 시 WASM)
+                const sessionOptions = {
+                    executionProviders: ['webgl', 'wasm', 'cpu'],
+                    graphOptimizationLevel: 'disabled' // 최적화 에러 방지
+                };
+
+                // 모델 로드: 바이너리 방식으로 직접 읽기
+                console.log(`모델 다운로드 시작: ${modelPath}`);
+                // 캐시 방지 타임스탬프 추가
+                const response = await fetch(`${modelPath}?t=${Date.now()}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const buffer = await response.arrayBuffer();
+
+                if (buffer.byteLength === 0) {
+                    throw new Error('모델 파일이 비어있습니다 (0 bytes). 서버 재시작 또는 모델 재생성이 필요합니다.');
+                }
+
+                // HTML 응답 체크
+                const firstByte = new Uint8Array(buffer)[0];
+                if (firstByte === 60) { // '<'
+                    const text = new TextDecoder().decode(buffer.slice(0, 100));
+                    throw new Error(`서버가 ONNX 대신 HTML을 반환했습니다. (내용: ${text}...)`);
+                }
+
+                console.log(`모델 바이너리 로드 완료 (${buffer.byteLength} bytes)`);
+                onnxSession = await ort.InferenceSession.create(buffer, sessionOptions);
+
+                modelLoaded = true;
+                modelStatus.className = 'model-status ready';
+                modelStatusText.textContent = '✅ Neural AI 준비 완료!';
+                setAiBubble('신경망 모델 로드 완료! 게임을 시작해주세요.', 'success');
+                addLog('🧠 ONNX 신경망 AI 로드 완료', 'ai');
+
+                console.log('ONNX 모델 로드 성공');
+                console.log('입력:', onnxSession.inputNames);
+                console.log('출력:', onnxSession.outputNames);
+
+            } catch (error) {
+                console.error('ONNX 모델 로드 실패:', error);
+
+                let errorMsg = '모델 로드 실패';
+                if (error.message) errorMsg += `: ${error.message}`;
+
+                modelStatus.className = 'model-status error';
+                modelStatusText.textContent = '⚠️ 모델 오류 - 랜덤 AI 사용';
+                setAiBubble('모델 로드 실패... 랜덤 AI로 플레이합니다.', 'fail');
+                addLog(`⚠️ ${errorMsg}`, 'fail');
+            }
+        }
+
+        // =========================================================
+        // 게임 상태 인코딩 (ONNX 입력용)
+        // INPUT_SIZE = 65
+        // =========================================================
+        function encodeGameState() {
+            const features = new Float32Array(65); // Hardcoded 65
+
+            // 1. 공개된 카드 정보 (26개)
+            const allCards = [...gameState.playerHand, ...gameState.aiHand];
+            for (const card of allCards) {
+                if (card.revealed) {
+                    let idx;
+                    if (card.number === JOKER_VALUE) {
+                        idx = card.color === 'black' ? 24 : 25;
+                    } else {
+                        idx = card.number * 2 + (card.color === 'white' ? 1 : 0);
+                    }
+                    if (idx >= 0 && idx < 26) {
+                        features[idx] = 1.0;
+                    }
+                }
+            }
+
+            // 2. AI 패 정보 (13개)
+            const offset1 = 26;
+            for (let i = 0; i < gameState.aiHand.length && i < MAX_HAND_SIZE; i++) {
+                const card = gameState.aiHand[i];
+                features[offset1 + i] = (card.number + 1) / 13.0; // 정규화
+            }
+
+            // 3. 플레이어 패 정보 (13개)
+            const offset2 = 39;
+            for (let i = 0; i < gameState.playerHand.length && i < MAX_HAND_SIZE; i++) {
+                if (!gameState.playerHand[i].revealed) {
+                    features[offset2 + i] = 1.0;
+                }
+            }
+
+            // 4. 가능한 숫자 정보 (13개)
+            const offset3 = 52;
+            const revealedNums = allCards.filter(c => c.revealed).map(c => c.number);
+
+            // 조커
+            if (revealedNums.filter(n => n === JOKER_VALUE).length < 2) features[offset3] = 1.0;
+
+            // 숫자 0-11
+            for (let i = 0; i <= 11; i++) {
+                if (revealedNums.filter(n => n === i).length < 2) features[offset3 + i + 1] = 1.0;
+            }
+
+            return features;
+        }
+
+        // =========================================================
+        // ONNX 모델 추론
+        // =========================================================
+        async function predictWithONNX() {
+            if (!modelLoaded || !onnxSession) {
+                return null;
+            }
+
+            try {
+                const inputData = encodeGameState();
+                // Tensor 생성: [1, 65]
+                const tensor = new ort.Tensor('float32', inputData, [1, 65]);
+
+                const feeds = {};
+                feeds[onnxSession.inputNames[0]] = tensor;
+
+                const results = await onnxSession.run(feeds);
+                const output = results[onnxSession.outputNames[0]];
+
+                return Array.from(output.data);
+            } catch (error) {
+                console.error('ONNX 추론 오류:', error);
+                return null;
+            }
+        }
+
+
+
+        // =========================================================
+        // 하이브리드 AI: 확률 추론 엔진
+        // =========================================================
+
+        /**
+         * 플레이어 패 분석 - 각 비공개 카드의 가능한 숫자 범위 계산
+         * 정렬 규칙: 왼쪽 < 오른쪽, 같은 숫자면 흑색이 왼쪽
+         */
+        function analyzePlayerHand() {
+            const hand = gameState.playerHand;
+            const revealedNumbers = getRevealedNumbers();
+            const analysis = [];
+
+            // 공개된 카드들의 숫자와 위치 파악
+            const revealedPositions = [];
+            hand.forEach((card, idx) => {
+                if (card.revealed) {
+                    revealedPositions.push({
+                        index: idx,
+                        number: card.number,
+                        color: card.color,
+                        sortValue: card.getSortValue()
+                    });
+                }
+            });
+
+            // 각 비공개 카드 분석
+            hand.forEach((card, idx) => {
+                if (card.revealed) {
+                    analysis.push({ index: idx, possibleNumbers: [], isRevealed: true });
+                    return;
+                }
+
+                // 기본: 모든 숫자 가능 (-1 ~ 11)
+                let possibleNumbers = [];
+
+                // 조커 가능 여부
+                const jokerCount = revealedNumbers.filter(n => n === JOKER_VALUE).length;
+                if (jokerCount < 2) {
+                    possibleNumbers.push(JOKER_VALUE);
+                }
+
+                // 일반 숫자 (0-11)
+                for (let n = 0; n <= 11; n++) {
+                    const count = revealedNumbers.filter(x => x === n).length;
+                    if (count < 2) {
+                        possibleNumbers.push(n);
+                    }
+                }
+
+                // 정렬 규칙으로 범위 축소
+                let minBound = -Infinity;
+                let maxBound = Infinity;
+
+                // 왼쪽에 공개된 카드가 있으면 그보다 커야 함
+                for (const revealed of revealedPositions) {
+                    if (revealed.index < idx) {
+                        // 왼쪽 카드보다 크거나 같아야 함
+                        if (revealed.number !== JOKER_VALUE) {
+                            minBound = Math.max(minBound, revealed.number);
+                        }
+                    }
+                    if (revealed.index > idx) {
+                        // 오른쪽 카드보다 작거나 같아야 함
+                        if (revealed.number !== JOKER_VALUE) {
+                            maxBound = Math.min(maxBound, revealed.number);
+                        }
+                    }
+                }
+
+                // 범위 적용 (조커는 예외)
+                possibleNumbers = possibleNumbers.filter(n => {
+                    if (n === JOKER_VALUE) return true;  // 조커는 어디든 가능
+                    return n >= minBound && n <= maxBound;
+                });
+
+                // 실패한 추리 제외
+                possibleNumbers = possibleNumbers.filter(n => {
+                    const key = `${idx}-${n}`;
+                    return !aiMemory.failedGuesses.has(key);
+                });
+
+                analysis.push({
+                    index: idx,
+                    possibleNumbers: possibleNumbers,
+                    isRevealed: false,
+                    minBound: minBound,
+                    maxBound: maxBound,
+                    probability: possibleNumbers.length > 0 ? 1 / possibleNumbers.length : 0
+                });
+            });
+
+            return analysis;
+        }
+
+        /**
+         * 하이브리드 스코어 계산
+         * ONNX 예측과 규칙 기반 확률을 결합
+         */
+        function calculateHybridScores(onnxPredictions, analysis) {
+            const scores = [];
+            const { onnxWeight, ruleWeight } = aiMemory.config;
+
+            for (const item of analysis) {
+                if (item.isRevealed || item.possibleNumbers.length === 0) continue;
+
+                for (const num of item.possibleNumbers) {
+                    const numIdx = num + 1;  // -1 -> 0, 0 -> 1, ...
+                    const outputIdx = item.index * NUM_NUMBERS + numIdx;
+
+                    // ONNX 점수 (없으면 0)
+                    let onnxScore = 0;
+                    if (onnxPredictions && outputIdx < onnxPredictions.length) {
+                        onnxScore = Math.max(0, onnxPredictions[outputIdx]);
+                    }
+
+                    // 규칙 기반 점수 (가능한 숫자 수 역수)
+                    const ruleScore = item.probability;
+
+                    // 하이브리드 점수
+                    const hybridScore = (onnxScore * onnxWeight) + (ruleScore * ruleWeight);
+
+                    scores.push({
+                        position: item.index,
+                        number: num,
+                        onnxScore: onnxScore,
+                        ruleScore: ruleScore,
+                        hybridScore: hybridScore,
+                        possibleCount: item.possibleNumbers.length
+                    });
+                }
+            }
+
+            // 점수 내림차순 정렬
+            scores.sort((a, b) => b.hybridScore - a.hybridScore);
+
+            return scores;
+        }
+
+        /**
+         * 연속 추리 여부 결정
+         */
+        function shouldContinueGuessing(analysis, hiddenCount) {
+            const { aggressiveness, minConfidenceForAttack } = aiMemory.config;
+
+            // 남은 카드가 2장 이하면 무조건 계속
+            if (hiddenCount <= 2) return true;
+
+            // 확률 80% 이상 카드가 있으면 계속
+            const highProbTarget = analysis.find(a =>
+                !a.isRevealed && a.probability >= 0.8
+            );
+            if (highProbTarget) return true;
+
+            // 연속 성공 중이면 더 적극적
+            const successBonus = aiMemory.consecutiveSuccesses * 0.1;
+            const adjustedAggression = Math.min(0.95, aggressiveness + successBonus);
+
+            return Math.random() < adjustedAggression;
+        }
+
+        /**
+         * 실패한 추리 기록
+         */
+        function recordFailedGuess(position, number) {
+            const key = `${position}-${number}`;
+            aiMemory.failedGuesses.add(key);
+            aiMemory.consecutiveSuccesses = 0;
+        }
+
+        /**
+         * 성공한 추리 기록
+         */
+        function recordSuccessfulGuess() {
+            aiMemory.consecutiveSuccesses++;
+        }
+
+        /**
+         * AI 메모리 리셋 (새 게임 시)
+         */
+        function resetAIMemory() {
+            aiMemory.failedGuesses.clear();
+            aiMemory.cachedProbabilities = null;
+            aiMemory.lastStateHash = null;
+            aiMemory.consecutiveSuccesses = 0;
+        }
+
+        // =========================================================
+        // 카드 클래스
+        // =========================================================
+        class Card {
+            constructor(number, color) {
+                this.number = number;
+                this.color = color;
+                this.revealed = false;
+                this.placedSortValue = null;
+            }
+
+            isJoker() {
+                return this.number === JOKER_VALUE;
+            }
+
+            getSortValue() {
+                if (this.isJoker() && this.placedSortValue !== null) {
+                    return this.placedSortValue;
+                }
+                return this.number * 2 + (this.color === 'white' ? 1 : 0);
+            }
+
+            getDisplayText() {
+                return this.isJoker() ? '-' : this.number.toString();
+            }
+        }
+
+        // =========================================================
+        // 덱 초기화
+        // =========================================================
+        function initializeDeck() {
+            const deck = [];
+            for (let i = 0; i <= 11; i++) {
+                deck.push(new Card(i, 'black'));
+                deck.push(new Card(i, 'white'));
+            }
+            deck.push(new Card(JOKER_VALUE, 'black'));
+            deck.push(new Card(JOKER_VALUE, 'white'));
+            return shuffleDeck(deck);
+        }
+
+        function shuffleDeck(deck) {
+            const shuffled = [...deck];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        function assignJokerPosition(hand, jokerCard) {
+            const usedValues = hand.filter(c => !c.isJoker() || c.placedSortValue !== null)
+                .map(c => c.getSortValue());
+            const possiblePositions = [];
+            for (let i = -1; i <= 24; i += 0.5) {
+                if (!usedValues.includes(i)) {
+                    possiblePositions.push(i);
+                }
+            }
+            const randomPos = possiblePositions[Math.floor(Math.random() * possiblePositions.length)];
+            jokerCard.placedSortValue = randomPos;
+        }
+
+        function sortHand(hand) {
+            hand.sort((a, b) => a.getSortValue() - b.getSortValue());
+            for (let i = 0; i < hand.length - 1; i++) {
+                const curr = hand[i];
+                const next = hand[i + 1];
+                if (curr.isJoker() && next.isJoker()) {
+                    if (curr.color === 'white' && next.color === 'black') {
+                        [hand[i], hand[i + 1]] = [hand[i + 1], hand[i]];
+                    }
+                }
+            }
+            return hand;
+        }
+
+        // =========================================================
+        // 새 게임 시작
+        // =========================================================
+        function startNewGame() {
+            // AI 메모리 리셋
+            resetAIMemory();
+
+            gameState.deck = initializeDeck();
+            gameState.playerHand = [];
+            gameState.aiHand = [];
+            gameState.currentTurn = 'player';
+            gameState.phase = 'draw';
+            gameState.round = 1;
+            gameState.drawnCard = null;
+            gameState.gameOver = false;
+            gameState.winner = null;
+
+            for (let i = 0; i < 4; i++) {
+                const playerCard = gameState.deck.pop();
+                const aiCard = gameState.deck.pop();
+
+                if (playerCard.isJoker()) {
+                    assignJokerPosition(gameState.playerHand, playerCard);
+                }
+                if (aiCard.isJoker()) {
+                    assignJokerPosition(gameState.aiHand, aiCard);
+                }
+
+                gameState.playerHand.push(playerCard);
+                gameState.aiHand.push(aiCard);
+            }
+
+            gameState.playerHand = sortHand(gameState.playerHand);
+            gameState.aiHand = sortHand(gameState.aiHand);
+
+            const header = logPanel.querySelector('.log-header');
+            logPanel.innerHTML = '';
+            logPanel.appendChild(header);
+
+            addLog('🎮 새 게임 시작!', 'info');
+            addLog('📌 카드를 뽑아 추리를 시작하세요.', 'info');
+
+            const aiType = modelLoaded ? '하이브리드 AI (신경망+확률추론)' : '확률 추론 AI';
+            setAiBubble(`안녕하세요! ${aiType}입니다. 당신의 차례입니다.`, 'thinking');
+            addLog(`🧠 AI 모드: ${aiType}`, 'ai');
+
+            updateUI();
+            render();
+        }
+
+        // =========================================================
+        // 카드 뽑기
+        // =========================================================
+        function drawCard(isPlayer) {
+            if (gameState.deck.length === 0) {
+                addLog('⚠️ 덱에 카드가 없습니다!', 'fail');
+                return null;
+            }
+
+            const card = gameState.deck.pop();
+            const hand = isPlayer ? gameState.playerHand : gameState.aiHand;
+
+            if (card.isJoker()) {
+                assignJokerPosition(hand, card);
+            }
+
+            hand.push(card);
+
+            if (isPlayer) {
+                gameState.playerHand = sortHand(gameState.playerHand);
+            } else {
+                gameState.aiHand = sortHand(gameState.aiHand);
+            }
+
+            return card;
+        }
+
+        // =========================================================
+        // 추리 실행
+        // =========================================================
+        function makeGuess(isPlayerGuessing, cardIndex, guessedNumber) {
+            const targetHand = isPlayerGuessing ? gameState.aiHand : gameState.playerHand;
+            const targetCard = targetHand[cardIndex];
+
+            if (!targetCard || targetCard.revealed) {
+                return false;
+            }
+
+            const actualNumber = targetCard.number;
+
+            if (actualNumber === guessedNumber) {
+                targetCard.revealed = true;
+                const target = isPlayerGuessing ? 'AI' : '플레이어';
+                const displayNum = guessedNumber === JOKER_VALUE ? '조커(-)' : guessedNumber;
+                addLog(`✅ 추리 성공! ${target}의 ${cardIndex + 1}번 카드: ${displayNum}`, 'success');
+                checkWinCondition();
+                return true;
+            } else {
+                if (gameState.drawnCard) {
+                    gameState.drawnCard.revealed = true;
+                    const drawnDisplay = gameState.drawnCard.isJoker() ? '조커(-)' : gameState.drawnCard.number;
+                    addLog(`❌ 추리 실패! 새 카드 공개: ${drawnDisplay}`, 'fail');
+                } else {
+                    addLog('❌ 추리 실패!', 'fail');
+                }
+                return false;
+            }
+        }
+
+        // =========================================================
+        // 승리 조건 확인
+        // =========================================================
+        function checkWinCondition() {
+            const playerAllRevealed = gameState.playerHand.every(card => card.revealed);
+            const aiAllRevealed = gameState.aiHand.every(card => card.revealed);
+
+            if (aiAllRevealed) {
+                gameState.gameOver = true;
+                gameState.winner = 'player';
+                addLog('🎉 축하합니다! 승리!', 'success');
+                setAiBubble('으악! 졌습니다... 다시 한 판 하실래요?', 'fail');
+            } else if (playerAllRevealed) {
+                gameState.gameOver = true;
+                gameState.winner = 'ai';
+                addLog('😢 AI 승리!', 'fail');
+                setAiBubble('후후, 제가 이겼네요! 다음엔 더 잘해보세요~', 'success');
+            }
+
+            if (gameState.gameOver) {
+                gameState.phase = 'waiting';
+                updateUI();
+            }
+        }
+
+        // =========================================================
+        // 턴 교대
+        // =========================================================
+        function switchTurn() {
+            gameState.currentTurn = gameState.currentTurn === 'player' ? 'ai' : 'player';
+            gameState.phase = 'draw';
+            gameState.drawnCard = null;
+            gameState.round++;
+
+            const turnName = gameState.currentTurn === 'player' ? '플레이어' : 'AI';
+            addLog(`🔄 ${turnName} 턴`, 'info');
+
+            updateUI();
+
+            if (gameState.currentTurn === 'ai' && !gameState.gameOver) {
+                setAiBubble('음... 제 차례군요. 분석 중...', 'thinking');
+                setTimeout(aiTurn, 1200);
+            }
+        }
+
+        // =========================================================
+        // AI 턴 로직
+        // =========================================================
+        function aiTurn() {
+            if (gameState.gameOver) return;
+
+            const drawnCard = drawCard(false);
+            if (drawnCard) {
+                addLog('🧠 AI가 카드를 뽑았습니다.', 'ai');
+                gameState.drawnCard = drawnCard;
+                setAiBubble('카드를 뽑았습니다! 패턴 분석 중...', 'thinking');
+            }
+
+            render();
+            setTimeout(() => aiMakeGuess(), 1500);
+        }
+
+        // =========================================================
+        // AI 추리 로직 (하이브리드: ONNX + 확률 추론)
+        // =========================================================
+        async function aiMakeGuess() {
+            if (gameState.gameOver) return;
+
+            const hiddenIndices = [];
+            gameState.playerHand.forEach((card, idx) => {
+                if (!card.revealed) hiddenIndices.push(idx);
+            });
+
+            if (hiddenIndices.length === 0) {
+                checkWinCondition();
+                return;
+            }
+
+            // 1. 플레이어 패 분석 (규칙 기반)
+            const analysis = analyzePlayerHand();
+
+            // 2. ONNX 모델 예측
+            const onnxPredictions = await predictWithONNX();
+
+            // 3. 하이브리드 스코어 계산
+            const hybridScores = calculateHybridScores(onnxPredictions, analysis);
+
+            let targetIdx, guessedNumber, confidence;
+
+            if (hybridScores.length > 0) {
+                // 최고 점수 선택
+                const best = hybridScores[0];
+                targetIdx = best.position;
+                guessedNumber = best.number;
+                confidence = best.hybridScore;
+
+                // 분석 로그
+                const posAnalysis = analysis.find(a => a.index === targetIdx);
+                const possibleCount = posAnalysis ? posAnalysis.possibleNumbers.length : '?';
+
+                if (modelLoaded) {
+                    addLog(`🧠 하이브리드 분석: ${targetIdx + 1}번 위치, 가능 숫자 ${possibleCount}개`, 'ai');
+                    addLog(`   ONNX: ${(best.onnxScore * 100).toFixed(1)}% | 규칙: ${(best.ruleScore * 100).toFixed(1)}%`, 'ai');
+                } else {
+                    addLog(`🧠 확률 분석: ${targetIdx + 1}번 위치, 가능 숫자 ${possibleCount}개`, 'ai');
+                }
+
+                // 확률이 100%면 특별 메시지
+                if (possibleCount === 1) {
+                    setAiBubble(`${targetIdx + 1}번 카드는 확실히 알겠어요! 🎯`, 'attack');
+                } else if (best.ruleScore >= 0.5) {
+                    setAiBubble(`${targetIdx + 1}번 카드... 높은 확률로 ${guessedNumber === JOKER_VALUE ? '조커' : guessedNumber}!`, 'attack');
+                } else {
+                    setAiBubble(`${targetIdx + 1}번 카드... ${guessedNumber === JOKER_VALUE ? '조커(-)' : guessedNumber}인가요?`, 'attack');
+                }
+            } else {
+                // 폴백: 분석 불가 시 랜덤 (거의 발생 안 함)
+                addLog('⚠️ 분석 불가 - 랜덤 추리', 'fail');
+                targetIdx = hiddenIndices[Math.floor(Math.random() * hiddenIndices.length)];
+
+                const usedNumbers = getRevealedNumbers();
+                const possibleNumbers = [];
+                const jokerCount = usedNumbers.filter(n => n === JOKER_VALUE).length;
+                if (jokerCount < 2) possibleNumbers.push(JOKER_VALUE);
+                for (let i = 0; i <= 11; i++) {
+                    const count = usedNumbers.filter(n => n === i).length;
+                    if (count < 2) possibleNumbers.push(i);
+                }
+                guessedNumber = possibleNumbers[Math.floor(Math.random() * possibleNumbers.length)];
+                confidence = 0.1;
+
+                setAiBubble(`${targetIdx + 1}번 카드... ${guessedNumber === JOKER_VALUE ? '조커(-)' : guessedNumber}?`, 'attack');
+            }
+
+            const guessDisplay = guessedNumber === JOKER_VALUE ? '조커(-)' : guessedNumber;
+            addLog(`🧠 AI 추리: ${targetIdx + 1}번 → ${guessDisplay}`, 'ai');
+
+            setTimeout(() => {
+                const success = makeGuess(false, targetIdx, guessedNumber);
+                render();
+
+                if (success && !gameState.gameOver) {
+                    // 성공 기록
+                    recordSuccessfulGuess();
+
+                    // 새로운 분석으로 연속 추리 결정
+                    const newAnalysis = analyzePlayerHand();
+                    const newHiddenCount = newAnalysis.filter(a => !a.isRevealed).length;
+
+                    if (newHiddenCount === 0) {
+                        checkWinCondition();
+                        return;
+                    }
+
+                    const continueAttack = shouldContinueGuessing(newAnalysis, newHiddenCount);
+
+                    if (continueAttack) {
+                        // 확률 높은 타겟 있는지 확인
+                        const highProbTarget = newAnalysis.find(a => !a.isRevealed && a.probability >= 0.5);
+                        if (highProbTarget) {
+                            setAiBubble(`맞았다! 🎉 다음 타겟도 보이네요...`, 'success');
+                        } else {
+                            setAiBubble(`맞았다! 계속 공격합니다...`, 'success');
+                        }
+                        setTimeout(() => aiMakeGuess(), 1500);
+                    } else {
+                        setAiBubble('맞았지만, 이번엔 여기까지. 당신 차례입니다.', 'thinking');
+                        switchTurn();
+                    }
+                } else if (!gameState.gameOver) {
+                    // 실패 기록
+                    recordFailedGuess(targetIdx, guessedNumber);
+
+                    setAiBubble('앗, 틀렸네요... 다음엔 맞출게요! 당신 차례입니다.', 'fail');
+                    setTimeout(switchTurn, 1000);
+                }
+            }, 800);
+        }
+
+        // =========================================================
+        // 공개된 숫자 목록
+        // =========================================================
+        function getRevealedNumbers() {
+            const numbers = [];
+            [...gameState.playerHand, ...gameState.aiHand].forEach(card => {
+                if (card.revealed) numbers.push(card.number);
+            });
+            return numbers;
+        }
+
+        // =========================================================
+        // AI 말풍선 설정
+        // =========================================================
+        function setAiBubble(text, type = 'thinking') {
+            aiBubble.textContent = text;
+            aiBubble.className = 'ai-bubble ' + type;
+        }
+
+        // =========================================================
+        // UI 업데이트
+        // =========================================================
+        function updateUI() {
+            const turnDisplay = document.getElementById('currentTurn');
+            turnDisplay.textContent = gameState.currentTurn === 'player' ? '플레이어' : 'AI';
+            turnDisplay.className = 'info-value ' + (gameState.currentTurn === 'player' ? 'player-turn' : 'ai-turn');
+
+            document.getElementById('roundNumber').textContent = gameState.round;
+            document.getElementById('playerRevealed').textContent =
+                gameState.playerHand.filter(c => c.revealed).length + '/' + gameState.playerHand.length;
+            document.getElementById('aiRevealed').textContent =
+                gameState.aiHand.filter(c => c.revealed).length + '/' + gameState.aiHand.length;
+            document.getElementById('deckRemaining').textContent = gameState.deck.length;
+
+            btnDrawCard.disabled = !(gameState.currentTurn === 'player' && gameState.phase === 'draw' && !gameState.gameOver);
+
+            if (gameState.currentTurn === 'player' && gameState.phase === 'guess' && !gameState.gameOver) {
+                guessPanel.classList.add('active');
+                updateCardPositionSelect();
+            } else {
+                guessPanel.classList.remove('active');
+            }
+        }
+
+        function updateCardPositionSelect() {
+            cardPositionSelect.innerHTML = '';
+            gameState.aiHand.forEach((card, idx) => {
+                if (!card.revealed) {
+                    const option = document.createElement('option');
+                    option.value = idx;
+                    option.textContent = `${idx + 1}번 카드`;
+                    cardPositionSelect.appendChild(option);
+                }
+            });
+        }
+
+        // =========================================================
+        // 로그 추가
+        // =========================================================
+        function addLog(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+            entry.textContent = `[${time}] ${message}`;
+
+            const header = logPanel.querySelector('.log-header');
+            if (header && header.nextSibling) {
+                logPanel.insertBefore(entry, header.nextSibling);
+            } else {
+                logPanel.appendChild(entry);
+            }
+        }
+
+        // =========================================================
+        // 렌더링
+        // =========================================================
+        function render() {
+            ctx.fillStyle = '#1e272e';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            ctx.font = 'bold 14px Segoe UI';
+            ctx.textAlign = 'center';
+
+            ctx.fillStyle = '#667eea';
+            ctx.fillText('🧠 Neural AI', CANVAS_WIDTH / 2, 25);
+            renderHand(gameState.aiHand, 40, 40, false);
+
+            renderDeck();
+
+            ctx.fillStyle = '#4ecca3';
+            ctx.fillText('👤 플레이어', CANVAS_WIDTH / 2, 305);
+            renderHand(gameState.playerHand, 40, 320, true);
+
+            if (gameState.gameOver) {
+                renderGameOver();
+            }
+        }
+
+        function renderHand(hand, startX, startY, showNumbers) {
+            const totalWidth = hand.length * (CARD_WIDTH + CARD_GAP) - CARD_GAP;
+            const offsetX = (CANVAS_WIDTH - totalWidth) / 2;
+
+            hand.forEach((card, idx) => {
+                const x = offsetX + idx * (CARD_WIDTH + CARD_GAP);
+                renderCard(card, x, startY, showNumbers);
+            });
+        }
+
+        function renderCard(card, x, y, showNumber) {
+            ctx.save();
+
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+
+            if (card.isJoker()) {
+                const gradient = ctx.createLinearGradient(x, y, x + CARD_WIDTH, y + CARD_HEIGHT);
+                if (card.color === 'black') {
+                    gradient.addColorStop(0, '#2d3436');
+                    gradient.addColorStop(1, '#636e72');
+                } else {
+                    gradient.addColorStop(0, '#dfe6e9');
+                    gradient.addColorStop(1, '#b2bec3');
+                }
+                ctx.fillStyle = gradient;
+            } else {
+                ctx.fillStyle = card.color === 'black' ? '#2d3436' : '#dfe6e9';
+            }
+
+            ctx.strokeStyle = card.revealed ? '#e94560' : '#636e72';
+            ctx.lineWidth = card.revealed ? 3 : 1;
+
+            roundRect(ctx, x, y, CARD_WIDTH, CARD_HEIGHT, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.shadowColor = 'transparent';
+
+            if (showNumber || card.revealed) {
+                ctx.fillStyle = card.color === 'black' ? '#ffffff' : '#2d3436';
+                ctx.font = card.isJoker() ? 'bold 28px Segoe UI' : 'bold 22px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(card.getDisplayText(), x + CARD_WIDTH / 2, y + CARD_HEIGHT / 2);
+
+                if (card.isJoker()) {
+                    ctx.font = '10px Segoe UI';
+                    ctx.fillText('JOKER', x + CARD_WIDTH / 2, y + CARD_HEIGHT - 12);
+                }
+            } else {
+                ctx.fillStyle = '#636e72';
+                ctx.font = 'bold 24px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('?', x + CARD_WIDTH / 2, y + CARD_HEIGHT / 2);
+            }
+
+            ctx.fillStyle = card.color === 'black' ? '#000000' : '#ffffff';
+            ctx.strokeStyle = '#636e72';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(x + CARD_WIDTH - 10, y + 10, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function renderDeck() {
+            const deckX = CANVAS_WIDTH / 2 - CARD_WIDTH / 2;
+            const deckY = 175;
+
+            for (let i = 0; i < Math.min(3, gameState.deck.length); i++) {
+                ctx.fillStyle = '#34495e';
+                ctx.strokeStyle = '#4a6572';
+                ctx.lineWidth = 1;
+                roundRect(ctx, deckX - i * 2, deckY - i * 2, CARD_WIDTH, CARD_HEIGHT, 6);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText(`🃏 ${gameState.deck.length}장`, deckX + CARD_WIDTH / 2, deckY + CARD_HEIGHT + 18);
+        }
+
+        function renderGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            ctx.fillStyle = gameState.winner === 'player' ? '#4ecca3' : '#e94560';
+            ctx.font = 'bold 42px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const msg = gameState.winner === 'player' ? '🎉 승리!' : '😢 패배!';
+            ctx.fillText(msg, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px Segoe UI';
+            ctx.fillText('새 게임 버튼을 클릭하세요', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
+        }
+
+        function roundRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        // ===== 이벤트 리스너 =====
+        btnNewGame.addEventListener('click', startNewGame);
+
+        btnDrawCard.addEventListener('click', () => {
+            if (gameState.phase !== 'draw' || gameState.currentTurn !== 'player') return;
+
+            const card = drawCard(true);
+            if (card) {
+                gameState.drawnCard = card;
+                const cardType = card.isJoker() ? '조커(-)' : `${card.color === 'black' ? '검정' : '흰색'} ${card.number}`;
+                addLog(`🃏 카드 획득: ${cardType}`, 'info');
+                gameState.phase = 'guess';
+                updateUI();
+                render();
+            }
+        });
+
+        btnGuess.addEventListener('click', () => {
+            const cardIdx = parseInt(cardPositionSelect.value);
+            const guessedNum = parseInt(guessNumberSelect.value);
+            const guessDisplay = guessedNum === JOKER_VALUE ? '조커(-)' : guessedNum;
+
+            addLog(`🔍 추리: ${cardIdx + 1}번 → ${guessDisplay}`, 'info');
+
+            const success = makeGuess(true, cardIdx, guessedNum);
+            render();
+
+            if (success && !gameState.gameOver) {
+                updateCardPositionSelect();
+                if (cardPositionSelect.options.length === 0) {
+                    checkWinCondition();
+                }
+                setAiBubble('앗, 맞추셨네요...!', 'fail');
+            } else if (!gameState.gameOver) {
+                setAiBubble('하하, 틀렸네요! 제 차례입니다.', 'success');
+                switchTurn();
+            }
+
+            updateUI();
+        });
+
+        btnPass.addEventListener('click', () => {
+            addLog('⏭️ 턴 넘김', 'info');
+            setAiBubble('좋아요, 제 차례군요!', 'thinking');
+            switchTurn();
+            render();
+        });
+
+        btnRules.addEventListener('click', () => rulesModal.classList.add('active'));
+        closeRules.addEventListener('click', () => rulesModal.classList.remove('active'));
+        rulesModal.addEventListener('click', (e) => {
+            if (e.target === rulesModal) rulesModal.classList.remove('active');
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (gameState.phase !== 'guess' || gameState.currentTurn !== 'player') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = CANVAS_WIDTH / rect.width;
+            const scaleY = CANVAS_HEIGHT / rect.height;
+            const clickX = (e.clientX - rect.left) * scaleX;
+            const clickY = (e.clientY - rect.top) * scaleY;
+
+            if (clickY >= 40 && clickY <= 40 + CARD_HEIGHT) {
+                const totalWidth = gameState.aiHand.length * (CARD_WIDTH + CARD_GAP) - CARD_GAP;
+                const offsetX = (CANVAS_WIDTH - totalWidth) / 2;
+
+                gameState.aiHand.forEach((card, idx) => {
+                    const cardX = offsetX + idx * (CARD_WIDTH + CARD_GAP);
+                    if (clickX >= cardX && clickX <= cardX + CARD_WIDTH && !card.revealed) {
+                        cardPositionSelect.value = idx;
+                    }
+                });
+            }
+        });
+
+        // ===== 초기화 =====
+        render();
+        addLog('🎴 다빈치 코드 ONNX AI 버전에 오신 것을 환영합니다!', 'info');
+
+        // ONNX 모델 로드
+        loadONNXModel();
+    </script>
+</body>
+
+</html>

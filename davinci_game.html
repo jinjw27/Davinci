@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Da Vinci Code - Neural AI</title>
+    <!-- ONNX Runtime Web CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0a0c10;
+            --surface-color: #161b22;
+            --primary-color: #3fb950;
+            --accent-color: #2f81f7;
+            --text-main: #f0f6fc;
+            --text-dim: #8b949e;
+            --card-w: 60px;
+            --card-h: 90px;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', 'Noto Sans KR', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* Header & Labels */
+        header {
+            width: 100%;
+            padding: 20px 0;
+            text-align: center;
+            background: linear-gradient(180deg, rgba(22, 27, 34, 0.8) 0%, rgba(10, 12, 16, 0) 100%);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(90deg, #3fabf7, #3fb950);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5rem;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-badge.ready {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .status-badge.loading {
+            color: #f2cc60;
+            border-color: #f2cc60;
+        }
+
+        .status-badge.error {
+            color: #f85149;
+            border-color: #f85149;
+        }
+
+        /* Game Board */
+        #game-container {
+            width: 95%;
+            max-width: 1000px;
+            margin: 20px auto;
+            position: relative;
+            background: var(--surface-color);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 40px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .area {
+            border-radius: 16px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            position: relative;
+            min-height: 180px;
+        }
+
+        .area-label {
+            position: absolute;
+            top: -10px;
+            left: 20px;
+            background: var(--surface-color);
+            padding: 2px 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            border-radius: 8px;
+        }
+
+        .card-list {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            perspective: 1000px;
+        }
+
+        /* Card Component */
+        .card {
+            width: var(--card-w);
+            height: var(--card-h);
+            background: #fff;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: 800;
+            font-size: 1.8rem;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .card:hover {
+            transform: translateY(-10px) rotateY(10deg);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .card.black {
+            background: #1a1a1a;
+            color: #fff;
+            border: 1px solid #333;
+        }
+
+        .card.white {
+            background: #fdfdfd;
+            color: #1a1a1a;
+            border: 1px solid #ddd;
+        }
+
+        .card.revealed {
+            outline: 3px solid var(--primary-color);
+        }
+
+        .card.hidden {
+            background-image: radial-gradient(circle, #444 1px, transparent 1px);
+            background-size: 4px 4px;
+        }
+
+        .card.hidden::after {
+            content: '?';
+            opacity: 0.2;
+        }
+
+        .card.hidden span {
+            display: none;
+        }
+
+        /* Controls */
+        #controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        #deck-area {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 32px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1rem;
+            border: none;
+            cursor: pointer;
+            transition: var(--transition);
+            outline: none;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #2ea043;
+            transform: scale(1.05);
+        }
+
+        .btn-black {
+            background: #1a1a1a;
+            color: #fff;
+            border: 1px solid #333;
+        }
+
+        .btn-white {
+            background: #fdfdfd;
+            color: #1a1a1a;
+            border: 1px solid #ddd;
+        }
+
+        /* UI Overlays */
+        #log {
+            width: 95%;
+            max-width: 1000px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 20px auto;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 4px;
+        }
+
+        .log-ai {
+            color: #58a6ff;
+        }
+
+        .log-player {
+            color: #7ee787;
+        }
+
+        .log-system {
+            color: #f2cc60;
+        }
+
+        /* Modal for Guessing */
+        #modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-body {
+            background: var(--surface-color);
+            padding: 40px;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            max-width: 500px;
+        }
+
+        .num-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .num-btn {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border-radius: 12px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .num-btn:hover {
+            background: var(--accent-color);
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>DA VINCI CODE AI</h1>
+        <div id="model-status" class="status-badge loading">Neural Engine Loading...</div>
+    </header>
+
+    <div id="game-container">
+        <!-- AI Area -->
+        <div class="area" id="ai-area">
+            <div class="area-label">Neural AI Target</div>
+            <div id="ai-hand" class="card-list"></div>
+        </div>
+
+        <!-- Deck / Info -->
+        <div id="controls">
+            <div id="deck-info" class="status-badge">Tiles Remaining: <span id="deck-count">16</span></div>
+            <div id="deck-area">
+                <button class="btn btn-black" onclick="playerAction('draw', 'black')">Draw BLACK</button>
+                <button class="btn btn-white" onclick="playerAction('draw', 'white')">Draw WHITE</button>
+            </div>
+            <div id="turn-info" style="font-size: 1.2rem; font-weight: 600;">Game Start! Draw a tile.</div>
+        </div>
+
+        <!-- Player Area -->
+        <div class="area" id="player-area">
+            <div class="area-label">Your Hand</div>
+            <div id="player-hand" class="card-list"></div>
+        </div>
+    </div>
+
+    <div id="log"></div>
+
+    <!-- Guess Modal -->
+    <div id="modal">
+        <div class="modal-body">
+            <h2 id="modal-title">Guess the Number</h2>
+            <p id="modal-desc">Think carefully.</p>
+            <div class="num-grid">
+                <!-- Numbers 0-11 -->
+                <button class="num-btn" onclick="submitGuess(0)">0</button>
+                <button class="num-btn" onclick="submitGuess(1)">1</button>
+                <button class="num-btn" onclick="submitGuess(2)">2</button>
+                <button class="num-btn" onclick="submitGuess(3)">3</button>
+                <button class="num-btn" onclick="submitGuess(4)">4</button>
+                <button class="num-btn" onclick="submitGuess(5)">5</button>
+                <button class="num-btn" onclick="submitGuess(6)">6</button>
+                <button class="num-btn" onclick="submitGuess(7)">7</button>
+                <button class="num-btn" onclick="submitGuess(8)">8</button>
+                <button class="num-btn" onclick="submitGuess(9)">9</button>
+                <button class="num-btn" onclick="submitGuess(10)">10</button>
+                <button class="num-btn" onclick="submitGuess(11)">11</button>
+            </div>
+            <button class="btn" onclick="closeModal()" style="margin-top: 20px; background: #333;">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. Game Constants & State
+        // ==========================================
+        const COLORS = ['black', 'white'];
+        const NUMBERS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+        let gameState = {
+            deck: [],
+            playerHand: [],
+            aiHand: [],
+            turn: 'player', // 'player' or 'ai'
+            phase: 'draw',   // 'draw', 'guess', 'result'
+            selectedTargetIdx: -1,
+            turnCount: 0,
+            modelLoaded: false,
+            onnxSession: null
+        };
+
+        // ==========================================
+        // 2. Card Class
+        // ==========================================
+        class Tile {
+            constructor(color, number) {
+                this.color = color;
+                this.number = number;
+                this.revealed = false;
+                this.isNew = false;
+            }
+            get id() {
+                // Unique ID for AI mapping: B0-11 (0-11), W0-11 (12-23)
+                return this.color === 'black' ? this.number : this.number + 12;
+            }
+        }
+
+        // ==========================================
+        // 3. AI Neural Logic
+        // ==========================================
+        async function loadAI() {
+            const status = document.getElementById('model-status');
+            try {
+                // Fetch ArrayBuffer for stability
+                const res = await fetch('./davinci_ai.onnx?t=' + Date.now());
+                if (!res.ok) throw new Error('Model file not found');
+                const buffer = await res.arrayBuffer();
+
+                if (buffer.byteLength === 0) throw new Error('Model is empty (0KB)');
+
+                // Initialize ORT
+                ort.env.wasm.numThreads = 1;
+                ort.env.wasm.simd = false;
+                ort.env.wasm.proxy = false;
+
+                gameState.onnxSession = await ort.InferenceSession.create(buffer, {
+                    executionProviders: ['wasm']
+                });
+
+                gameState.modelLoaded = true;
+                status.textContent = '✅ Neural Engine Ready';
+                status.className = 'status-badge ready';
+                addLog('Neural Engine (Opset 13) Loaded.', 'system');
+            } catch (err) {
+                console.error(err);
+                status.textContent = '⚠️ AI Offline (Check model file)';
+                status.className = 'status-badge error';
+                addLog('AI Engine failed to initialize.', 'system');
+            }
+        }
+
+        async function getAiPrediction() {
+            if (!gameState.modelLoaded || !gameState.onnxSession) return null;
+
+            // Encode Input (52 dims)
+            const input = new Float32Array(52);
+
+            // 1. My Tiles (AI's tiles) [24]
+            gameState.aiHand.forEach(t => input[t.id] = 1.0);
+
+            // 2. Opponent Revealed [24]
+            gameState.playerHand.forEach(t => {
+                if (t.revealed) input[24 + t.id] = 1.0;
+            });
+
+            // 3. Game Info [4]
+            input[48] = (gameState.turnCount / 20);
+            input[49] = (gameState.aiHand.length / 12);
+            input[50] = (gameState.playerHand.length / 12);
+            input[51] = (gameState.deck.length / 24);
+
+            try {
+                const feeds = {};
+                feeds[gameState.onnxSession.inputNames[0]] = new ort.Tensor('float32', input, [1, 52]);
+                const results = await gameState.onnxSession.run(feeds);
+                return Array.from(results[gameState.onnxSession.outputNames[0]].data);
+            } catch (e) {
+                console.error('Inference Error:', e);
+                return null;
+            }
+        }
+
+        // ==========================================
+        // 4. Game Engine
+        // ==========================================
+        function initGame() {
+            addLog('Initializing new game...', 'system');
+            gameState.deck = [];
+            COLORS.forEach(c => NUMBERS.forEach(n => gameState.deck.push(new Tile(c, n))));
+            shuffle(gameState.deck);
+
+            gameState.playerHand = [];
+            gameState.aiHand = [];
+
+            for (let i = 0; i < 4; i++) {
+                gameState.playerHand.push(gameState.deck.pop());
+                gameState.aiHand.push(gameState.deck.pop());
+            }
+
+            sortHand(gameState.playerHand);
+            sortHand(gameState.aiHand);
+
+            render();
+            updateTurnText();
+        }
+
+        function sortHand(hand) {
+            hand.sort((a, b) => {
+                if (a.number === b.number) {
+                    return a.color === 'black' ? -1 : 1;
+                }
+                return a.number - b.number;
+            });
+        }
+
+        function shuffle(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+        }
+
+        function render() {
+            const playerArea = document.getElementById('player-hand');
+            const aiArea = document.getElementById('ai-hand');
+            const deckCount = document.getElementById('deck-count');
+
+            playerArea.innerHTML = '';
+            aiArea.innerHTML = '';
+            deckCount.textContent = gameState.deck.length;
+
+            gameState.playerHand.forEach((t, i) => {
+                const el = createCardElement(t, false, i);
+                playerArea.appendChild(el);
+            });
+
+            gameState.aiHand.forEach((t, i) => {
+                const el = createCardElement(t, true, i);
+                aiArea.appendChild(el);
+            });
+        }
+
+        function createCardElement(tile, isAI, index) {
+            const div = document.createElement('div');
+            div.className = `card ${tile.color}`;
+            if (tile.revealed) div.classList.add('revealed');
+            else if (isAI) div.classList.add('hidden');
+
+            const span = document.createElement('span');
+            span.textContent = tile.number;
+            div.appendChild(span);
+
+            if (!isAI && !tile.revealed) {
+                // Interaction: AI card selection for player guess
+            } else if (isAI && !tile.revealed && gameState.turn === 'player' && gameState.phase === 'guess') {
+                div.onclick = () => selectTarget(index);
+            }
+
+            if (tile.isNew) div.style.boxShadow = '0 0 20px #f2cc60';
+
+            return div;
+        }
+
+        function addLog(msg, type) {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type ? 'log-' + type : ''}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            log.prepend(entry);
+        }
+
+        function updateTurnText() {
+            const info = document.getElementById('turn-info');
+            if (gameState.turn === 'player') {
+                if (gameState.phase === 'draw') info.textContent = 'Your Turn: Draw a tile to start.';
+                else if (gameState.phase === 'guess') info.textContent = 'Your Turn: Select an AI tile and guess its number.';
+            } else {
+                info.textContent = 'Neural AI is calculating...';
+            }
+        }
+
+        // ==========================================
+        // 5. Actions
+        // ==========================================
+        function playerAction(type, color) {
+            if (gameState.turn !== 'player' || gameState.phase !== 'draw') return;
+
+            const idx = gameState.deck.findIndex(t => t.color === color);
+            if (idx === -1) {
+                alert(`${color} tiles are empty!`);
+                return;
+            }
+
+            const tile = gameState.deck.splice(idx, 1)[0];
+            tile.isNew = true;
+            gameState.playerHand.push(tile);
+            addLog(`You drew a ${color} tile.`, 'player');
+
+            sortHand(gameState.playerHand);
+            gameState.phase = 'guess';
+            render();
+            updateTurnText();
+        }
+
+        function selectTarget(idx) {
+            gameState.selectedTargetIdx = idx;
+            document.getElementById('modal').style.display = 'flex';
+            document.getElementById('modal-title').textContent = `Guessing AI's ${gameState.aiHand[idx].color} tile`;
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function submitGuess(num) {
+            closeModal();
+            const target = gameState.aiHand[gameState.selectedTargetIdx];
+            addLog(`You guessed ${num} for the ${target.color} tile.`, 'player');
+
+            if (target.number === num) {
+                target.revealed = true;
+                addLog('Success! The tile is revealed.', 'player');
+                if (checkWin()) return;
+
+                if (confirm('Success! Guess again? (Cancel to end turn)')) {
+                    render();
+                } else {
+                    endTurn();
+                }
+            } else {
+                addLog('Failure! You must reveal your new tile.', 'system');
+                const newTile = gameState.playerHand.find(t => t.isNew);
+                if (newTile) {
+                    newTile.revealed = true;
+                    newTile.isNew = false;
+                }
+                setTimeout(endTurn, 1000);
+            }
+            render();
+        }
+
+        function endTurn() {
+            gameState.playerHand.forEach(t => t.isNew = false);
+            gameState.aiHand.forEach(t => t.isNew = false);
+            gameState.turn = gameState.turn === 'player' ? 'ai' : 'player';
+            gameState.phase = 'draw';
+            gameState.turnCount++;
+            render();
+            updateTurnText();
+            if (gameState.turn === 'ai') aiTurn();
+        }
+
+        async function aiTurn() {
+            // AI Draw
+            const randColor = COLORS[Math.floor(Math.random() * 2)];
+            let idx = gameState.deck.findIndex(t => t.color === randColor);
+            if (idx === -1) idx = 0;
+
+            if (gameState.deck.length > 0) {
+                const tile = gameState.deck.splice(idx, 1)[0];
+                tile.isNew = true;
+                gameState.aiHand.push(tile);
+                addLog(`AI drew a ${tile.color} tile.`, 'ai');
+                sortHand(gameState.aiHand);
+                render();
+            }
+
+            // AI Guess (using Neural Model)
+            setTimeout(async () => {
+                addLog('Neural AI is analyzing your hand...', 'ai');
+                const predictions = await getAiPrediction();
+
+                // Find visible player cards
+                const hiddenIndices = gameState.playerHand.map((t, i) => t.revealed ? -1 : i).filter(i => i !== -1);
+
+                if (hiddenIndices.length === 0) {
+                    endTurn();
+                    return;
+                }
+
+                // Pick a target card from hidden ones
+                const targetIdx = hiddenIndices[Math.floor(Math.random() * hiddenIndices.length)];
+                const target = gameState.playerHand[targetIdx];
+
+                let guessedNum = 0;
+                if (predictions) {
+                    // Logic: pick highest score for the target's color
+                    const offset = target.color === 'black' ? 0 : 12;
+                    let maxVal = -Infinity;
+                    for (let i = 0; i < 12; i++) {
+                        if (predictions[offset + i] > maxVal) {
+                            maxVal = predictions[offset + i];
+                            guessedNum = i;
+                        }
+                    }
+                } else {
+                    guessedNum = Math.floor(Math.random() * 12);
+                }
+
+                addLog(`AI guesses your ${target.color} tile is ${guessedNum}.`, 'ai');
+
+                if (target.number === guessedNum) {
+                    target.revealed = true;
+                    addLog('AI succeeded! Your tile is revealed.', 'ai');
+                    if (checkWin()) return;
+                    render();
+                    // AI may guess again (omitted for simplicity or can add recurrent call)
+                    setTimeout(endTurn, 1500);
+                } else {
+                    addLog('AI failed! AI reveals its new tile.', 'system');
+                    const newTile = gameState.aiHand.find(t => t.isNew);
+                    if (newTile) newTile.revealed = true;
+                    setTimeout(endTurn, 1500);
+                }
+                render();
+            }, 1000);
+        }
+
+        function checkWin() {
+            if (gameState.playerHand.every(t => t.revealed)) {
+                alert('Neural AI WINS!');
+                location.reload();
+                return true;
+            }
+            if (gameState.aiHand.every(t => t.revealed)) {
+                alert('You WIN! Neural AI defeated.');
+                location.reload();
+                return true;
+            }
+            return false;
+        }
+
+        // Initialize
+        window.onload = () => {
+            if (window.location.protocol === 'file:') {
+                alert('경고: 브라우저 보안 정책으로 인해 file:// 프로토콜에서는 모델을 로드할 수 없습니다.\n\n반드시 run_server.bat를 실행하여 http://localhost:8000 으로 접속해주세요.');
+            }
+            loadAI();
+            initGame();
+        };
+
+    </script>
+</body>
+
+</html>
